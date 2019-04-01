@@ -45,6 +45,13 @@ privateKeys = {}
 # this is 0xEC 
 ENCRYPT = 236 
 
+# Flag bits
+SOCK352_SYN     = 0b00001  # 0x01 == 1
+SOCK352_FIN     = 0b00010  # 0x02 == 2
+SOCK352_ACK     = 0b00100  # 0x04 == 4
+SOCK352_RESET   = 0b01000  # 0x08 == 8
+SOCK352_HAS_OPT = 0b10000  # 0x10 == 16
+
 # this is the structure of the sock352 packet 
 sock352HdrStructStr = '!BBBBHHLLQQLL'
 
@@ -54,6 +61,8 @@ def init(UDPportTx,UDPportRx):
 
     # create the sockets to send and receive UDP packets on 
     # if the ports are not equal, create two sockets, one for Tx and one for Rx
+    sock352portTx = UDPportTx
+    sock352portRx = UDPportRx
 
     
 # read the keyfile. The result should be a private key and a keychain of
@@ -93,6 +102,7 @@ class socket:
     
     def __init__(self):
         # your code goes here 
+        self.syssock = syssock.socket(syssock.AF_INET, socket.SOCK_DGRAM)
         return 
         
     def bind(self,address):
@@ -136,7 +146,6 @@ class socket:
     def recv(self,nbytes):
         # your code goes here
         return 
-
 
 
     
