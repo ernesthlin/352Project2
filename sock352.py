@@ -277,18 +277,18 @@ class socket:
             # receiving the first ACK.
             (readableSockets, writableSockets, err) = select.select([self.syssock], [], [], 0)
             if (len(readableSockets) > 0):
-                print "Receiving ACK. Next Ack: " + str(lastAckReceived)
+                print "Receiving ACK. Next Ack expected: " + str(lastAckReceived)
                 packet = self.recvSingleRdpPacket() 
-                if packet.flags & SOCK352_ACK == 0:
-                    # Ignore packet
-                    continue
-                print "ACK Packet Received. ACK: " + str(packet.ack_no) + ", flags: " + str(packet.flags)
-
                 # If packet received is NOT an ACK, user is still sending. Last ACK we sent must not have been received.
                 # Re-send ACK. Start sending from packet 0 again.
                 if (packet.equals(self.lastPacketRecv)):
                     self.sendSingleRdpPacket(self.lastAckSent)
                     lastPacketSent = -1
+                    continue
+                if packet.flags & SOCK352_ACK == 0:
+                    # Ignore packet
+                    continue
+                print "ACK Packet Received. ACK: " + str(packet.ack_no) + ", flags: " + str(packet.flags)
 
                 # start timer if ACK # not previously seen was received and if ACK is not completely up-to-date
                 if (lastAckReceived < packet.ack_no < lastPacketSent): 
