@@ -330,6 +330,9 @@ class socket:
                 # Still receiving packets from previous recvRdpPackets call... Re-send last ACK and restart.
                 self.sendSingleRdpPacket(self.lastAckSent)
                 continue
+            if nextPacket.flags & SOCK352_FIN > 0:
+                # Ignore packet
+                continue
             print "Received Sequence no: " + str(nextPacket.sequence_no) + " (out of " + str(numPackets) + ")"
             if (nextPacket.sequence_no == lastAck + 1): 
                 lastAck += 1
