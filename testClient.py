@@ -6,7 +6,7 @@ sock352.init(38911, 38912)
 socket = sock352.socket()
 
 # Client will drop 20% of the packets it sends.
-socket.dropPercentage = 20
+socket.dropPercentage = 90
 
 # Create really long string.
 s = "".join([str(i) for i in range(100000)])

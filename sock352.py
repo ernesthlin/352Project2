@@ -1,6 +1,7 @@
 # Problems
-# Send Last ACK but drop --> Start FIN. (On regular packet recv, need to re-send last ACK and FIN.)
-# Send Last ACK but drop --> Start Sending. (On regular packet recv, need to re-send last ACK)
+# Send Last ACK but drop --> Start FIN. (On last packet recv, need to re-send last ACK and FIN.)
+# Send Last ACK but drop --> Start Sending. (On last packet recv, need to re-send last ACK)
+# Send Last ACK but drop --> Start Recv again. (On last packet recv, need to re-send last ACK)
 
 import binascii
 import socket as syssock
@@ -102,6 +103,7 @@ class socket:
         self.connected = False
         self.nonce = nacl.utils.random(Box.NONCE_SIZE)
         self.lastAckSent = None
+        self.lastPacketRecv = None
     
     def bind(self,address):
         # Bind - Server will bind on recvPort and wait for incoming connections.
@@ -171,22 +173,34 @@ class socket:
     Client and Server both send a FIN and an ACK for the FIN that they receive.
     """
     def close(self): 
+        catchupNeeded = False
         # 2-way double handshake. Send FIN and wait for ACK.
-        while True:
-            # Handshake part 1 - Send FIN.
-            self.sendSingleRdpPacket(self.generateEmptyPacket(SOCK352_FIN, 0, 0), True)
-            # Handshake part 2 - Receive FIN.
-            packet = self.recvSingleRdpPacket()
-            # If packet received is not a FIN packet, that means last ACK was not received. 
-            if (packet.flags & SOCK352_FIN > 0):
-                break
-            print("Not a FIN packet. Restarting. Flags: " + str(packet.flags))
-            # Re-send last ACK packet and re-start closing handshake.
+        # Handshake part 1 - Send FIN.
+        self.sendSingleRdpPacket(self.generateEmptyPacket(SOCK352_FIN, 0, 0), True)
+        # Handshake part 2 - Receive FIN.
+        packet = self.recvSingleRdpPacket()
+        # If packet received is not a FIN packet, that means last ACK was not received. 
+        while (packet.flags & SOCK352_FIN == 0):
+            catchupNeeded = True
+            print("Not a FIN packet. Sending last ACK and Restarting. Flags: " + str(packet.flags))
             self.sendSingleRdpPacket(self.lastAckSent)
+            packet = self.recvSingleRdpPacket()
+
+        if catchupNeeded:
+            self.sendSingleRdpPacket(self.generateEmptyPacket(SOCK352_FIN, 0, 0), True)
         # Handshake part 3 - Send ACK.
-        self.sendSingleRdpPacket(self.generateEmptyPacket(SOCK352_ACK, 0, 0), True)
+        self.sendSingleRdpPacket(self.generateEmptyPacket(SOCK352_ACK, 729, 729), True)
+        catchupNeeded = False
         # Handshake part 4 - Receive ACK.
         packet = self.recvSingleRdpPacket()
+        # If packet received is not a FIN packet, that means last ACK was not received. 
+        while (packet.flags & SOCK352_ACK == 0 or packet.ack_no != 729):
+            catchupNeeded = True
+            print("Not a final ACK packet. Receiving again... Flags: " + str(packet.flags))
+            packet = self.recvSingleRdpPacket()
+
+        if catchupNeeded:
+            self.sendSingleRdpPacket(self.generateEmptyPacket(SOCK352_ACK, 729, 729), True)
         print "Closing complete. Flags Received here: " + str(packet.flags)
         # print "2-way double handshake complete. Closing Socket."
         # Tell OS we are done with socket.
@@ -262,7 +276,7 @@ class socket:
 
                 # If packet received is NOT an ACK, user is still sending. Last ACK we sent must not have been received.
                 # Re-send ACK. Start sending from packet 0 again.
-                if (packet.flags & SOCK352_ACK == 0):
+                if (packet.equals(self.lastPacketRecv)):
                     self.sendSingleRdpPacket(self.lastAckSent)
                     lastPacketSent = -1
 
@@ -304,16 +318,20 @@ class socket:
         ret = [None] * numPackets
         lastAck = -1
         while(lastAck + 1 < numPackets):
-            # Check to see if socket has data in its buffer to recv.
-            (readableSockets, writableSockets, err) = select.select([self.syssock], [], [], 0)
             nextPacket = self.recvSingleRdpPacket()
-            # print "Received Sequence no: " + str(nextPacket.sequence_no)
+            if (nextPacket.equals(self.lastPacketRecv)):
+                # Still receiving packets from previous recvRdpPackets call... Re-send last ACK and restart.
+                self.sendSingleRdpPacket(self.lastAckSent)
+                continue
+            print "Received Sequence no: " + str(nextPacket.sequence_no) + " (out of " + str(numPackets) + ")"
             if (nextPacket.sequence_no == lastAck + 1): 
                 lastAck += 1
                 ret[lastAck] = nextPacket
                 self.sendSingleRdpPacket(self.generateEmptyPacket(SOCK352_ACK, lastAck, lastAck))
             elif (nextPacket.sequence_no <= lastAck): # if receive old packet, resend the current cumulative ACK
                 self.sendSingleRdpPacket(self.generateEmptyPacket(SOCK352_ACK, lastAck, lastAck))
+        self.lastAckSent = self.generateEmptyPacket(SOCK352_ACK, lastAck, lastAck)
+        self.lastPacketRecv = ret[-1]
         return ret
 
 
@@ -328,8 +346,6 @@ class socket:
     def sendSingleRdpPacket(self, packet, handshake = False):
         # Serialize RDP Packet into raw data.
         # Transmit data through UDP socket.
-        if (packet.flags & SOCK352_ACK > 0):
-            self.lastAckSent = packet
 
         if (self.encrypt and not packet.encrypted):
             packet.flags |= SOCK352_HAS_OPT
