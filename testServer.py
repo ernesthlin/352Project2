@@ -1,30 +1,32 @@
 import sock352
 
-sock352.readKeyChain('server.key')
-sock352.init(38912, 38911)
+for i in range(0, 30):
+	print("Iteration", i)
+	sock352.readKeyChain('server.key')
+	sock352.init(38912, 38911)
 
-socket = sock352.socket()
+	socket = sock352.socket()
 
-# Server will drop 20% of the packets it sends.
-socket.dropPercentage = 20
+	# Server will drop 20% of the packets it sends.
+	socket.dropPercentage = 20
 
-print "Binding..."
-socket.bind(('', 1010))
-print "Listening..."
-socket.listen(5)
-print "Accepting..."
-socket.accept()#sock352.ENCRYPT)
+	print "Binding..."
+	socket.bind(('', 1010))
+	print "Listening..."
+	socket.listen(5)
+	print "Accepting..."
+	socket.accept(sock352.ENCRYPT)
 
-print "Receiving..."
+	print "Receiving..."
 
-data = socket.recv(488890)
+	data = socket.recv(488890)
 
-print "Sending: " + data[:20] + "..." + data[-20:]
-ret = socket.send(data)
+	print "Sending: " + data[:20] + "..." + data[-20:]
+	ret = socket.send(data)
 
-print "Sent."
-print "Closing socket..."
+	print "Sent."
+	print "Closing socket..."
 
-socket.close()
+	socket.close()
 
-print "Closed socket."
+	print "Closed socket."
