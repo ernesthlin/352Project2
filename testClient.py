@@ -6,7 +6,7 @@ sock352.init(38911, 38912)
 socket = sock352.socket()
 
 # Client will drop 20% of the packets it sends.
-socket.dropPercentage = 0
+socket.dropPercentage = 20
 
 # Create really long string.
 s = "".join([str(i) for i in range(100000)])
@@ -22,6 +22,7 @@ print "Connected"
 print "Sending TEST"
 socket.send(s)
 
+print "Receiving TEST"
 ret = socket.recv(488890)
 
 print "DATA RECEIVED BACK"

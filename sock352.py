@@ -1,3 +1,7 @@
+# Problems
+# Send Last ACK but drop --> Start FIN. (On regular packet recv, need to re-send last ACK and FIN.)
+# Send Last ACK but drop --> Start Sending. (On regular packet recv, need to re-send last ACK)
+
 import binascii
 import socket as syssock
 import struct
@@ -9,7 +13,6 @@ import random
 # encryption libraries 
 import nacl.utils
 import nacl.secret
-import nacl.utils
 from nacl.public import PrivateKey, Box
 
 # if you want to debug and print the current stack frame 
@@ -94,12 +97,11 @@ class socket:
     def __init__(self):
         # Prepare System UDP Socket
         self.syssock = syssock.socket(syssock.AF_INET, syssock.SOCK_DGRAM)
-        self.lastPacketReceived = None
-        self.lastPacketSent = None
         self.dropPercentage = 0
         self.encrypt = False
         self.connected = False
         self.nonce = nacl.utils.random(Box.NONCE_SIZE)
+        self.lastAckSent = None
     
     def bind(self,address):
         # Bind - Server will bind on recvPort and wait for incoming connections.
@@ -170,14 +172,22 @@ class socket:
     """
     def close(self): 
         # 2-way double handshake. Send FIN and wait for ACK.
-        # Handshake part 1 - Send FIN.
-        self.sendSingleRdpPacket(self.generateEmptyPacket(SOCK352_FIN, 0, 0), True)
-        # Handshake part 2 - Receive FIN.
-        packet = self.recvSingleRdpPacket()
+        while True:
+            # Handshake part 1 - Send FIN.
+            self.sendSingleRdpPacket(self.generateEmptyPacket(SOCK352_FIN, 0, 0), True)
+            # Handshake part 2 - Receive FIN.
+            packet = self.recvSingleRdpPacket()
+            # If packet received is not a FIN packet, that means last ACK was not received. 
+            if (packet.flags & SOCK352_FIN > 0):
+                break
+            print("Not a FIN packet. Restarting. Flags: " + str(packet.flags))
+            # Re-send last ACK packet and re-start closing handshake.
+            self.sendSingleRdpPacket(self.lastAckSent)
         # Handshake part 3 - Send ACK.
         self.sendSingleRdpPacket(self.generateEmptyPacket(SOCK352_ACK, 0, 0), True)
         # Handshake part 4 - Receive ACK.
         packet = self.recvSingleRdpPacket()
+        print "Closing complete. Flags Received here: " + str(packet.flags)
         # print "2-way double handshake complete. Closing Socket."
         # Tell OS we are done with socket.
         self.syssock.close()
@@ -248,7 +258,13 @@ class socket:
             if (len(readableSockets) > 0):
                 print "Receiving ACK. Next Ack: " + str(lastAckReceived)
                 packet = self.recvSingleRdpPacket() 
-                # print "ACK Packet Received. ACK: " + str(packet.ack_no)
+                print "ACK Packet Received. ACK: " + str(packet.ack_no) + ", flags: " + str(packet.flags)
+
+                # If packet received is NOT an ACK, user is still sending. Last ACK we sent must not have been received.
+                # Re-send ACK. Start sending from packet 0 again.
+                if (packet.flags & SOCK352_ACK == 0):
+                    self.sendSingleRdpPacket(self.lastAckSent)
+                    lastPacketSent = -1
 
                 # start timer if ACK # not previously seen was received and if ACK is not completely up-to-date
                 if (lastAckReceived < packet.ack_no < lastPacketSent): 
@@ -312,9 +328,9 @@ class socket:
     def sendSingleRdpPacket(self, packet, handshake = False):
         # Serialize RDP Packet into raw data.
         # Transmit data through UDP socket.
+        if (packet.flags & SOCK352_ACK > 0):
+            self.lastAckSent = packet
 
-        if packet.flags & SOCK352_FIN == 0:
-            self.lastPacketSent = packet
         if (self.encrypt and not packet.encrypted):
             packet.flags |= SOCK352_HAS_OPT
             packet.opt_ptr = 1
@@ -364,11 +380,6 @@ class socket:
             ret.opt_ptr = 0
             # print ret.data[:20]
 
-        # Ignore packet and resend last packet sent.
-        if ret.equals(self.lastPacketReceived):
-            self.sendSingleRdpPacket(self.lastPacketSent)
-
-        self.lastPacketReceived = ret
         return ret
 
 
