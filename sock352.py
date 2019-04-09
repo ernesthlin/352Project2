@@ -201,9 +201,10 @@ class socket:
                 self.sendSingleRdpPacket(self.generateEmptyPacket(SOCK352_FIN, rand_no, rand_no), True)
                 self.sendSingleRdpPacket(self.generateEmptyPacket(SOCK352_ACK, packet.ack_no, packet.ack_no), True)
                 packet = self.recvSingleRdpPacket()
-            print "Closing complete. Flags Received here: " + str(packet.flags)
         except:
-            print("Socket closed by other end. (Some handshake packet was dropped... Closing socket.)")
+            # Other end closed socket. We will close socket too.
+            pass
+        print "Closing complete. Flags Received here: " + str(packet.flags)
         # print "2-way double handshake complete. Closing Socket."
         # Tell OS we are done with socket.
         self.syssock.close()
