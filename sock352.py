@@ -175,8 +175,9 @@ class socket:
     def close(self): 
         catchupNeeded = False
         # 2-way double handshake. Send FIN and wait for ACK.
+        rand_no = random.randint(1000000000, 4294967294)
         # Handshake part 1 - Send FIN.
-        self.sendSingleRdpPacket(self.generateEmptyPacket(SOCK352_FIN, 0, 0), True)
+        self.sendSingleRdpPacket(self.generateEmptyPacket(SOCK352_FIN, rand_no, rand_no), True)
         # Handshake part 2 - Receive FIN.
         packet = self.recvSingleRdpPacket()
         # If packet received is not a FIN packet, that means last ACK was not received. 
@@ -184,24 +185,25 @@ class socket:
             catchupNeeded = True
             print("Not a FIN packet. Sending last ACK and Restarting. Flags: " + str(packet.flags))
             self.sendSingleRdpPacket(self.lastAckSent)
+            self.sendSingleRdpPacket(self.generateEmptyPacket(SOCK352_FIN, rand_no, rand_no), True)
             packet = self.recvSingleRdpPacket()
 
-        if catchupNeeded:
-            self.sendSingleRdpPacket(self.generateEmptyPacket(SOCK352_FIN, 0, 0), True)
-        # Handshake part 3 - Send ACK.
-        self.sendSingleRdpPacket(self.generateEmptyPacket(SOCK352_ACK, 729, 729), True)
-        catchupNeeded = False
-        # Handshake part 4 - Receive ACK.
-        packet = self.recvSingleRdpPacket()
-        # If packet received is not a FIN packet, that means last ACK was not received. 
-        while (packet.flags & SOCK352_ACK == 0 or packet.ack_no != 729):
-            catchupNeeded = True
-            print("Not a final ACK packet. Receiving again... Flags: " + str(packet.flags))
+        try:
+            # Handshake part 3 - Send ACK.
+            self.sendSingleRdpPacket(self.generateEmptyPacket(SOCK352_ACK, packet.ack_no, packet.ack_no), True)
+            catchupNeeded = False
+            # Handshake part 4 - Receive ACK.
             packet = self.recvSingleRdpPacket()
-
-        if catchupNeeded:
-            self.sendSingleRdpPacket(self.generateEmptyPacket(SOCK352_ACK, 729, 729), True)
-        print "Closing complete. Flags Received here: " + str(packet.flags)
+            # If packet received is not a FIN packet, that means last ACK was not received. 
+            while (packet.flags & SOCK352_ACK == 0 or packet.ack_no != rand_no):
+                catchupNeeded = True
+                print("Not a final ACK packet. Sending FIN/ACK and receiving again... Flags: " + str(packet.flags))
+                # self.sendSingleRdpPacket(self.generateEmptyPacket(SOCK352_FIN, rand_no, rand_no), True)
+                self.sendSingleRdpPacket(self.generateEmptyPacket(SOCK352_ACK, packet.ack_no, packet.ack_no), True)
+                packet = self.recvSingleRdpPacket()
+            print "Closing complete. Flags Received here: " + str(packet.flags)
+        except:
+            print("Socket closed by other end. (Some handshake packet was dropped... Closing socket.)")
         # print "2-way double handshake complete. Closing Socket."
         # Tell OS we are done with socket.
         self.syssock.close()
@@ -267,7 +269,11 @@ class socket:
                 self.sendSingleRdpPacket(packets[lastPacketSent])
                 # print "Sent " + str(lastPacketSent) + ", last ACK received: " + str(lastAckReceived)
 
-            # Check for ACK
+            # Check for ACK packet availability here.
+            # Select System Call will check if the UDP socket can be read from.
+            # If it cannot be read from, we will not call recv until after sending the next packet.
+            # This prevents "stop-and-wait" and allows multiple packets to be sent before 
+            # receiving the first ACK.
             (readableSockets, writableSockets, err) = select.select([self.syssock], [], [], 0)
             if (len(readableSockets) > 0):
                 print "Receiving ACK. Next Ack: " + str(lastAckReceived)

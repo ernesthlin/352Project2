@@ -6,14 +6,14 @@ sock352.init(38912, 38911)
 socket = sock352.socket()
 
 # Server will drop 20% of the packets it sends.
-socket.dropPercentage = 90
+socket.dropPercentage = 20
 
 print "Binding..."
 socket.bind(('', 1010))
 print "Listening..."
 socket.listen(5)
 print "Accepting..."
-socket.accept(sock352.ENCRYPT)
+socket.accept()#sock352.ENCRYPT)
 
 print "Receiving..."
 
