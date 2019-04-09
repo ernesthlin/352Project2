@@ -279,6 +279,9 @@ class socket:
             if (len(readableSockets) > 0):
                 print "Receiving ACK. Next Ack: " + str(lastAckReceived)
                 packet = self.recvSingleRdpPacket() 
+                if packet.flags & SOCK352_ACK == 0:
+                    # Ignore packet
+                    continue
                 print "ACK Packet Received. ACK: " + str(packet.ack_no) + ", flags: " + str(packet.flags)
 
                 # If packet received is NOT an ACK, user is still sending. Last ACK we sent must not have been received.
