@@ -198,7 +198,7 @@ class socket:
             while (packet.flags & SOCK352_ACK == 0 or packet.ack_no != rand_no):
                 catchupNeeded = True
                 print("Not a final ACK packet. Sending FIN/ACK and receiving again... Flags: " + str(packet.flags))
-                # self.sendSingleRdpPacket(self.generateEmptyPacket(SOCK352_FIN, rand_no, rand_no), True)
+                self.sendSingleRdpPacket(self.generateEmptyPacket(SOCK352_FIN, rand_no, rand_no), True)
                 self.sendSingleRdpPacket(self.generateEmptyPacket(SOCK352_ACK, packet.ack_no, packet.ack_no), True)
                 packet = self.recvSingleRdpPacket()
             print "Closing complete. Flags Received here: " + str(packet.flags)
